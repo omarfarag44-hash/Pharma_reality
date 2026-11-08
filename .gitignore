@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local PostgreSQL test cluster & test output
+.local-pg/
+/test-results/
+/playwright-report/
+!.env.example
