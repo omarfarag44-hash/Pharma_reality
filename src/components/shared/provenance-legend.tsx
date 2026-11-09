@@ -12,9 +12,9 @@ export function ProvenanceLegend({ dict }: { dict: Dictionary }) {
         <span aria-hidden className="bg-chart-1 inline-block h-2.5 w-4 rounded-sm" />
         {dict.common.provenance.simulated_current}
       </span>
-      <span className="inline-flex items-center gap-1.5 opacity-70">
+      <span className="inline-flex items-center gap-1.5">
         <span aria-hidden className="inline-block h-2.5 w-4 rounded-sm border border-dashed border-current" />
-        {dict.common.provenance.scenario_generated} (—)
+        {dict.common.provenance.scenario_generated}
       </span>
       <span className="inline-flex items-center gap-1.5">
         <Info className="size-3.5" aria-hidden />

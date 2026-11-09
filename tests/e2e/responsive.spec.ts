@@ -20,3 +20,14 @@ test("mobile menu opens and navigates", async ({ page, isMobile }) => {
   await expect(page).toHaveURL(/\/en\/employees$/);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
+
+test("the day loop is usable on a phone", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "mobile only");
+  await page.goto("/ar/today");
+  await page.locator('[data-scenario="first_priorities"]').getByTestId("scenario-option").first().click();
+  await expect(page.locator('[data-scenario="first_priorities"]')).toHaveAttribute("data-state", "decided");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  await page.getByTestId("end-day").click();
+  await expect(page.getByTestId("today-day")).toContainText("2");
+});

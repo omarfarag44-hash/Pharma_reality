@@ -18,6 +18,12 @@ import { fmt } from "@/lib/i18n";
 import { formatDate, formatNumber, formatPercent } from "@/lib/i18n/format";
 import { pageContext } from "@/lib/page";
 import { getPersonDetail } from "@/services/people-service";
+import { getSimulation } from "@/data/repository";
+import { trustOf } from "@/lib/simulation/engine";
+import { leadershipDna } from "@/lib/simulation/leadership";
+import { DNA_DIMENSIONS } from "@/lib/simulation/types";
+import { getSimIndex, memoriesOf } from "@/services/simulation-service";
+import { TrustValue } from "@/components/simulation/scenario-card";
 import { SingleLineChart } from "@/components/charts/charts";
 import { PageHeader } from "@/components/shared/page-header";
 import { PersonLink } from "@/components/shared/person-link";
@@ -38,6 +44,10 @@ export default async function PersonPage({ params }: { params: Promise<{ locale:
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const person = await getPersonDetail(repo, id);
   if (!person) notFound();
+  const [run, simIdx] = await Promise.all([getSimulation(), getSimIndex(repo)]);
+  const memories = memoriesOf(run, id, simIdx, locale);
+  const dna = person.employee.isPlayer ? leadershipDna(run.state) : null;
+  const st = dict.sim;
   const { employee: e, profile: p } = person;
   const t = dict.profile;
   const L = (cat: Parameters<typeof catalogLabel>[0], code: string) => catalogLabel(cat, code)[locale];
@@ -311,6 +321,54 @@ export default async function PersonPage({ params }: { params: Promise<{ locale:
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        {dna ? (
+          <Card data-testid="player-dna">
+            <CardHeader>
+              <CardTitle>{st.dnaTitle}</CardTitle>
+              <CardDescription>{st.playerDnaNote}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 text-sm">
+              <p className="font-medium">{dna.style ? st.styles[dna.style as keyof typeof st.styles] : fmt(st.dnaForming, { n: 3 })}</p>
+              <ul className="flex flex-col gap-2.5">
+                {DNA_DIMENSIONS.map((d) => (
+                  <li key={d} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 text-xs">
+                    <span>{st.dims[d]}</span>
+                    <span className="tabular-nums">{dna.scores[d]}</span>
+                    <div className="col-span-2"><Meter value={dna.scores[d]} /></div>
+                  </li>
+                ))}
+              </ul>
+              <Link href={`/${locale}/leadership`} className="text-primary text-xs hover:underline">{st.viewDna}</Link>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card data-testid="memories">
+            <CardHeader>
+              <CardTitle>{st.memoriesTitle}</CardTitle>
+              <CardDescription className="flex flex-wrap gap-x-4 gap-y-1">
+                <span>{st.trustNow}: <TrustValue value={trustOf(run.world, run.state, id)} /></span>
+                <span>{st.trustStart}: <span className="tabular-nums" dir="ltr">{run.world.baseTrust.get(id) ?? 50}</span></span>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm">
+              {memories.length === 0 ? (
+                <p className="text-muted-foreground">{st.memoriesEmpty}</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {memories.map((m, i) => (
+                    <li key={i} className="flex flex-col gap-0.5 rounded-lg border p-2.5" data-testid="memory">
+                      <span className="text-muted-foreground flex items-center gap-2 text-[11px]">
+                        <Badge variant={m.type === "grievance" ? "critical" : m.type === "recognition" ? "good" : "muted"}>{st.memoryType[m.type]}</Badge>
+                        {dict.common.day} {m.day}
+                      </span>
+                      <span>{m.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        )}
         {p && (
           <Card>
             <CardHeader>
