@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, CalendarDays, LayoutDashboard, Network, Users, UsersRound, Landmark } from "lucide-react";
+import { Building2, CalendarDays, Flag, GraduationCap, LayoutDashboard, Network, Sparkles, Users, UsersRound, Landmark } from "lucide-react";
 import type { Locale } from "@/domain/common";
 import type { Dictionary } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,9 @@ import { NAV_ITEMS } from "./nav-items";
 
 const ICONS = {
   dashboard: LayoutDashboard,
+  today: Flag,
+  leadership: Sparkles,
+  coaching: GraduationCap,
   org: Network,
   branches: Building2,
   employees: Users,

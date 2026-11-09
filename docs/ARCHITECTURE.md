@@ -1,4 +1,4 @@
-# Architecture — Pharma Reality, Sprint 1
+# Architecture — Pharma Reality (Sprints 1–2)
 
 > NEXUS PHARMACIES is a **fictional** company. Every person, branch, number and
 > relationship is synthetic and generated from a fixed seed. It does not represent
@@ -135,3 +135,23 @@ that work (`src/domain/simulation.ts`).
   and remembers the choice in the `PR_LOCALE` cookie.
 - Dictionaries are typed: `ar.ts` must match the shape of `en.ts`.
 - Numbers and codes are wrapped in LTR isolates inside RTL text.
+
+## Simulation engine (Sprint 2)
+
+```
+cookie PR_SIM (day, choices, coaching)  ──►  runSimulation(world, progress)   src/lib/simulation/engine.ts
+                                                 │  replays day by day using SCENARIOS (data)
+                                                 ▼
+                                   SimState: metric deltas, trust, memories,
+                                   decisions, Leadership DNA points, coaching
+                                                 │
+                       applySimulation(dataset)  ▼  src/lib/simulation/overlay.ts
+                                   OrgDataset as the player's decisions changed it
+                                                 │
+                                   DatasetRepository → existing services and pages
+```
+
+- `getSimulation()` and `getRepository()` (`src/data/repository/index.ts`) are cached per request. The repository now returns the overlaid dataset, so every Sprint 1 screen shows the simulated world.
+- Server actions in `src/lib/simulation/actions.ts` validate against the replayed run, update the cookie and redirect.
+- Scenario `code`s and option order are part of saved progress: append new templates/options, never renumber or reorder.
+- See `docs/SPRINT2_REPORT.md` for content and rules.

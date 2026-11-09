@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarDays, Flag } from "lucide-react";
 import { fmt } from "@/lib/i18n";
 import { formatDate, formatWeekday } from "@/lib/i18n/format";
+import { getSimulation } from "@/data/repository";
 import { pageContext } from "@/lib/page";
 import { buildCalendar, type CalendarDay } from "@/lib/simulation/calendar";
 import { CalendarViewSchema } from "@/validation/filters";
@@ -12,10 +13,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
-function DayCell({ day, locale, weekendLabel }: { day: CalendarDay; locale: "ar" | "en"; weekendLabel: string }) {
+function DayCell({ day, locale, weekendLabel, decisions }: { day: CalendarDay; locale: "ar" | "en"; weekendLabel: string; decisions: number }) {
+  const Comp = day.status === "current" ? Link : "div";
   return (
-    <div
+    <Comp
+      href={`/${locale}/today`}
       data-testid="calendar-day"
+      data-decisions={decisions}
       data-day={day.dayNumber}
       data-current={day.status === "current" ? "true" : undefined}
       aria-current={day.status === "current" ? "date" : undefined}
@@ -28,14 +32,21 @@ function DayCell({ day, locale, weekendLabel }: { day: CalendarDay; locale: "ar"
     >
       <span className="font-semibold tabular-nums">{day.dayNumber}</span>
       <span className={cn("truncate", day.status === "current" ? "opacity-90" : "text-muted-foreground")}>{formatDate(day.date, locale, "short")}</span>
-    </div>
+      {decisions > 0 && (
+        <span aria-hidden className="flex gap-0.5">
+          {Array.from({ length: Math.min(decisions, 4) }, (_, i) => <span key={i} className={cn("size-1.5 rounded-full", day.status === "current" ? "bg-primary-foreground" : "bg-primary")} />)}
+        </span>
+      )}
+    </Comp>
   );
 }
 
 export default async function CalendarPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { locale, dict, repo } = await pageContext(params);
   const view = CalendarViewSchema.parse((await searchParams).view);
-  const session = await repo.getSimulationSession();
+  const [session, run] = await Promise.all([repo.getSimulationSession(), getSimulation()]);
+  const decisionsByDay = new Map<number, number>();
+  for (const d of run.state.decisions) if (d.option !== null) decisionsByDay.set(d.day, (decisionsByDay.get(d.day) ?? 0) + 1);
   const cal = buildCalendar(session);
   const t = dict.calendar;
   const weekdayHeaders = cal.days.slice(0, 7);
@@ -63,7 +74,7 @@ export default async function CalendarPage({ params, searchParams }: { params: P
             </Link>
           ))}
         </nav>
-        <p className="text-muted-foreground text-xs">{t.noEvents}</p>
+        <Link href={`/${locale}/today`} className="text-primary text-xs hover:underline">{t.noEvents}</Link>
       </div>
 
       {view === "day" && (
@@ -73,7 +84,7 @@ export default async function CalendarPage({ params, searchParams }: { params: P
               {weekdayHeaders.map((d) => (
                 <div key={d.weekday} className="text-muted-foreground pb-1 text-[11px] font-medium">{formatWeekday(d.date, locale)}</div>
               ))}
-              {cal.days.map((d) => <DayCell key={d.dayNumber} day={d} locale={locale} weekendLabel={t.weekend} />)}
+              {cal.days.map((d) => <DayCell key={d.dayNumber} day={d} locale={locale} weekendLabel={t.weekend} decisions={decisionsByDay.get(d.dayNumber) ?? 0} />)}
             </div>
           </CardContent>
         </Card>

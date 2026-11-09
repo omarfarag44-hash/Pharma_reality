@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Database, FlaskConical, LogOut } from "lucide-react";
 import type { Locale } from "@/domain/common";
 import type { Dictionary } from "@/lib/i18n";
@@ -40,9 +41,9 @@ export function AppShell({ locale, dict, mode, modeWarning, simulation, children
             <MobileNav locale={locale} dict={dict} />
             {simulation && (
               <div className="flex min-w-0 items-center gap-2 text-sm" data-testid="simulation-day">
-                <span className="bg-primary text-primary-foreground rounded-md px-2 py-0.5 text-xs font-semibold whitespace-nowrap">
+                <Link href={`/${locale}/today`} className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-2 py-0.5 text-xs font-semibold whitespace-nowrap">
                   {dict.common.day} {simulation.currentDay} {dict.common.of} {simulation.lengthDays}
-                </span>
+                </Link>
                 <span className="text-muted-foreground hidden truncate sm:inline">{formatDate(simulation.currentDate, locale, "long")}</span>
               </div>
             )}

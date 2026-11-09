@@ -1,8 +1,8 @@
-# PHARMA REALITY — Sprint 1
+# PHARMA REALITY — Sprint 2
 
 **An AI-ready pharmacy retail management simulation.** You play the **Area Supervisor** of the Central Region of **NEXUS PHARMACIES**, a fictional Saudi community-pharmacy chain: 15 branches, 60 pharmacists (15 Branch Leaders), 3 peer Area Supervisors, 8 central departments and an executive team.
 
-Sprint 1 delivers the **organisational foundation**: the world, its data model, the analytics engine and the screens to explore it. No AI simulation runs yet — the architecture is prepared for it (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
+Sprint 1 delivered the **organisational foundation**: the world, its data model, the analytics engine and the screens to explore it. Sprint 2 makes it **playable**: a 90-day loop of situations, decisions with deterministic consequences, Leadership DNA, character memory and coaching plans (see [docs/SPRINT2_REPORT.md](docs/SPRINT2_REPORT.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 
 > NEXUS PHARMACIES is entirely fictional. All people, branches and figures are synthetic and generated deterministically. It does not represent the structure or data of any real company.
 
@@ -10,6 +10,9 @@ Sprint 1 delivers the **organisational foundation**: the world, its data model, 
 
 | Screen | Route |
 |---|---|
+| Today: the day's situations, your decisions and their effects, end the day | `/{locale}/today` |
+| Leadership DNA and decision log | `/{locale}/leadership` |
+| Coaching plans with Branch Leaders | `/{locale}/coaching` |
 | Dashboard (area KPIs, branch performance, regional comparison, attention list, departments, organisation summary) | `/{ar|en}` |
 | Organisation chart (interactive; every person opens a profile) | `/{locale}/organization` |
 | Branch directory (search, group & performance filters, 8 sort keys) | `/{locale}/branches` |
@@ -104,4 +107,5 @@ docs/                   Architecture, test results, sprint report, screenshots
 - [Architecture](docs/ARCHITECTURE.md)
 - [Test results](docs/TEST_RESULTS.md)
 - [Sprint 1 report — completed / incomplete features, Sprint 2 recommendations](docs/SPRINT1_REPORT.md)
+- [Sprint 2 report — day loop, scenarios, decisions, Leadership DNA, memory, coaching](docs/SPRINT2_REPORT.md)
 - [Screenshots](docs/screenshots)

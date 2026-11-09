@@ -6,6 +6,10 @@ import { INDICATOR_KEYS } from "@/lib/analytics";
 import { formatCurrency, formatMonth, formatNumber, formatPercent, formatSignedCurrency, formatSignedPercent } from "@/lib/i18n/format";
 import { pageContext } from "@/lib/page";
 import { getBranchDetail } from "@/services/branch-service";
+import { getSimulation } from "@/data/repository";
+import { decisionView, getSimIndex, renderText } from "@/services/simulation-service";
+import { SCENARIO_BY_CODE } from "@/lib/simulation/scenarios";
+import { EffectList } from "@/components/simulation/scenario-card";
 import { SalesTrendChart, SingleLineChart } from "@/components/charts/charts";
 import { GROUP_COLORS } from "@/components/charts/palette";
 import { formatIndicator, INDICATOR_SCALE } from "@/components/shared/indicator-format";
@@ -28,13 +32,22 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ l
   const b = s.branch;
   const t = dict.branches;
   const color = GROUP_COLORS[b.performanceGroup]!;
+  const [run, simIdx] = await Promise.all([getSimulation(), getSimIndex(repo)]);
+  const situations = [...run.state.events.values()]
+    .flat()
+    .filter((e) => e.branchId === b.id)
+    .sort((x, y) => y.day - x.day)
+    .map((inst) => {
+      const record = run.state.decisions.find((d) => d.instance.id === inst.id);
+      return { inst, title: renderText(SCENARIO_BY_CODE.get(inst.code)!.title, inst, simIdx, locale), decision: record ? decisionView(record, simIdx, locale) : null };
+    });
   const days = 30;
 
   const salesData = s.history.map((h) => ({
     month: formatMonth(h.month, locale, true),
     target: h.salesTarget,
     actual: h.salesActual,
-    isCurrent: h.provenance === "simulated_current",
+    isCurrent: h.provenance !== "synthetic_historical",
     tooltipTitle: formatMonth(h.month, locale),
     targetLabel: formatCurrency(h.salesTarget, locale),
     actualLabel: formatCurrency(h.salesActual, locale),
@@ -111,6 +124,7 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ l
             </div>
             <SalesTrendChart data={salesData} color={color} labels={{ target: dict.common.target, actual: dict.common.actual, achievement: dict.indicators.achievement, provenance: dict.common.status }} />
             <ProvenanceLegend dict={dict} />
+            {s.current.provenance === "scenario_generated" && <p className="text-xs font-medium" data-testid="changed-by-decisions">{dict.sim.changedByDecisions}</p>}
           </CardContent>
         </Card>
 
@@ -318,6 +332,35 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ l
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-6" data-testid="branch-situations">
+        <CardHeader>
+          <CardTitle>{dict.sim.situationsHere}</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm">
+          {situations.length === 0 ? (
+            <p className="text-muted-foreground">{dict.sim.noSituationsHere}</p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {situations.map(({ inst, title, decision }) => (
+                <li key={inst.id} className="flex flex-col gap-1.5 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="muted">{dict.common.day} {inst.day}</Badge>
+                    <span className="font-medium">{title}</span>
+                    {!decision && <Link href={`/${locale}/today#${inst.id}`} className="text-primary text-xs hover:underline">{dict.sim.openToday}</Link>}
+                  </div>
+                  {decision && (
+                    <>
+                      <span className="text-muted-foreground text-xs">{dict.sim.yourChoice}: {decision.label ?? dict.sim.ignoredLabel}</span>
+                      <EffectList effects={decision.effects.filter((e) => e.kind === "metric")} dict={dict} />
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 }

@@ -71,7 +71,7 @@ export async function getBranchSummaries(repo: OrgRepository): Promise<BranchSum
       .filter((m) => m.branchId === branch.id)
       .sort((a, b) => a.month.localeCompare(b.month))
       .map((m) => deriveMetrics(m, attendanceRate(attendanceByBranchMonth.get(`${branch.id}|${m.month}`) ?? [])));
-    const current = history.find((h) => h.provenance === "simulated_current") ?? history[history.length - 1]!;
+    const current = history.find((h) => h.provenance === "scenario_generated" || h.provenance === "simulated_current") ?? history[history.length - 1]!;
     const staff = (staffByBranch.get(branch.id) ?? []).sort((a, b) => Number(b.isBranchLeader) - Number(a.isBranchLeader) || a.employeeCode.localeCompare(b.employeeCode));
     const flags = attentionFlags(current);
     return {

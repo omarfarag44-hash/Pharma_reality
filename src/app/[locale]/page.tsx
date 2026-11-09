@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { AlertTriangle, Building2, Target, TrendingUp, Users } from "lucide-react";
+import { AlertTriangle, Building2, Flag, Target, TrendingUp, Users } from "lucide-react";
+import { getSimulation } from "@/data/repository";
 import { PERFORMANCE_GROUP_LABELS, ZONE_LABELS } from "@/domain/catalogs";
 import { classify } from "@/lib/analytics";
 import { fmt } from "@/lib/i18n";
@@ -20,7 +21,7 @@ import { Progress } from "@/components/ui/progress";
 
 export default async function DashboardPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale, dict, repo } = await pageContext(params);
-  const d = await getDashboard(repo);
+  const [d, run] = await Promise.all([getDashboard(repo), getSimulation()]);
   const t = dict.dashboard;
   const achievementDelta = d.areaPrevious ? d.area.achievement - d.areaPrevious.achievement : null;
   const salesDelta = d.areaPrevious ? ((d.area.salesActual - d.areaPrevious.salesActual) / d.areaPrevious.salesActual) * 100 : null;
@@ -40,6 +41,21 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
   return (
     <>
       <PageHeader title={t.title} description={`${t.subtitle} · ${formatMonth(d.currentMonth, locale)}`} />
+
+      {!run.state.completed && (
+        <Link
+          href={`/${locale}/today`}
+          data-testid="today-card"
+          className={`mb-4 flex items-center gap-3 rounded-xl border p-4 text-sm transition-colors ${run.pending.length ? "border-primary/50 bg-primary/5 hover:bg-primary/10" : "bg-card hover:bg-muted/60"}`}
+        >
+          <Flag className="text-primary size-5 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">{dict.sim.dashboardCardTitle} · {dict.common.day} {run.state.day}</span>
+            <span className="text-muted-foreground">{run.pending.length ? fmt(dict.sim.dashboardCardBody, { n: run.pending.length }) : dict.sim.dashboardCardNone}</span>
+          </span>
+          <span className="text-primary shrink-0 font-medium">{dict.sim.openToday}</span>
+        </Link>
+      )}
 
       <section aria-label={t.title} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile testId="kpi-branches" label={t.totalBranches} value={formatNumber(d.counts.branches, locale)} icon={<Building2 />} detail={`A ${d.byGroup.find((g) => g.key === "A")?.metrics.count ?? 0} · B ${d.byGroup.find((g) => g.key === "B")?.metrics.count ?? 0} · C ${d.byGroup.find((g) => g.key === "C")?.metrics.count ?? 0}`} />
