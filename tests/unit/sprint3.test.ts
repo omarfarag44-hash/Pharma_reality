@@ -40,7 +40,7 @@ function playUntil(key: string, option = 0, maxDays = 90): { progress: Progress;
 const decide = (progress: Progress, inst: ScenarioInstance, option: number | null) =>
   runSimulation(world, option === null ? { ...progress, day: inst.day + 1 } : { ...progress, decisions: [...progress.decisions, { day: inst.day, code: inst.code, option }] });
 
-const model = (over: Partial<CharacterModel> & { personality?: Partial<CharacterModel["personality"]> }): CharacterModel => ({
+const model = (over: Partial<Omit<CharacterModel, "personality">> & { personality?: Partial<CharacterModel["personality"]> }): CharacterModel => ({
   id: "x",
   motivators: [],
   stressTriggers: [],
