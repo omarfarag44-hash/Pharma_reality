@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck, CheckCircle2, Coffee, Flag, GraduationCap, RotateCcw, Sparkles } from "lucide-react";
+import { CalendarCheck, CheckCircle2, ClipboardList, Coffee, Flag, GraduationCap, RotateCcw, Sparkles, Sunrise } from "lucide-react";
 import { getSimulation } from "@/data/repository";
 import { fmt } from "@/lib/i18n";
 import { formatDate } from "@/lib/i18n/format";
@@ -8,6 +8,7 @@ import { endDay, resetSimulation } from "@/lib/simulation/actions";
 import { addDaysIso } from "@/lib/simulation/calendar";
 import { isWeekend } from "@/lib/simulation/engine";
 import { leadershipDna } from "@/lib/simulation/leadership";
+import { getBranchSummaries } from "@/services/branch-service";
 import { getSimIndex, scenarioView } from "@/services/simulation-service";
 import { ScenarioCard } from "@/components/simulation/scenario-card";
 import { PageHeader } from "@/components/shared/page-header";
@@ -20,8 +21,9 @@ import { Progress } from "@/components/ui/progress";
 export default async function TodayPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale, dict, repo } = await pageContext(params);
   const t = dict.sim;
-  const [run, idx] = await Promise.all([getSimulation(), getSimIndex(repo)]);
+  const [run, idx, summaries] = await Promise.all([getSimulation(), getSimIndex(repo), getBranchSummaries(repo)]);
   const { state, world } = run;
+  const sl = dict.sl;
   const date = addDaysIso(world.startDate, state.day - 1);
   const views = run.today.map((inst) => scenarioView(run, inst, idx, locale));
   const pending = views.filter((v) => !v.decision);
@@ -30,6 +32,17 @@ export default async function TodayPage({ params }: { params: Promise<{ locale: 
   const activePlans = state.coaching.filter((c) => c.status === "active");
   const weekend = isWeekend(world, state.day);
   const isLastDay = state.day === world.lengthDays;
+  // Morning briefing (rule-based): last closed report, branches over the attention threshold, fixed meetings, plans ending.
+  let lastReport = 0;
+  for (let d = state.completed ? world.lengthDays : state.day - 1; d >= 1; d--) {
+    if (!isWeekend(world, d)) {
+      lastReport = d;
+      break;
+    }
+  }
+  const attention = summaries.filter((b) => b.needsAttention).sort((a, b) => b.attentionScore - a.attentionScore).slice(0, 3);
+  const reviewToday = views.some((v) => v.template.key === "weekly_review");
+  const plansEnding = activePlans.filter((p) => p.endDay === state.day);
 
   return (
     <>
@@ -55,6 +68,44 @@ export default async function TodayPage({ params }: { params: Promise<{ locale: 
           icon={<CalendarCheck />}
         />
       </section>
+
+      {(lastReport > 0 || (!weekend && !state.completed)) && (
+        <Card className="mt-6" data-testid="briefing">
+          <CardHeader className="flex-row items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2"><Sunrise className="size-4" aria-hidden />{sl.briefingTitle}</CardTitle>
+            {lastReport > 0 && (
+              <Button asChild size="sm" variant="outline" data-testid="open-report">
+                <Link href={`/${locale}/report/${lastReport}`}><ClipboardList className="size-4" aria-hidden />{fmt(sl.reportReady, { n: lastReport })}</Link>
+              </Button>
+            )}
+          </CardHeader>
+          {!weekend && !state.completed && (
+            <CardContent className="flex flex-col gap-2 text-sm">
+              <ul className="flex list-disc flex-col gap-1 ps-5">
+                <li>{fmt(sl.briefingSituations, { n: views.length })}</li>
+                {reviewToday && <li>{sl.briefingReview}</li>}
+                {plansEnding.map((p) => (
+                  <li key={p.branchId}>{fmt(sl.briefingPlansEnding, { name: idx.employees.get(p.leaderId)?.fullName[locale] ?? "" })}</li>
+                ))}
+              </ul>
+              <div>
+                <span className="text-muted-foreground text-xs">{sl.briefingAttention}: </span>
+                {attention.length === 0 ? (
+                  <span className="text-xs">{sl.briefingNoAttention}</span>
+                ) : (
+                  <span className="inline-flex flex-wrap gap-1.5 align-middle">
+                    {attention.map((b) => (
+                      <Link key={b.code} href={`/${locale}/branches/${b.code}`} className="hover:bg-muted rounded border px-1.5 py-0.5 text-xs">
+                        <span className="ltr-nums">{b.code}</span> · {b.branch.name[locale]}
+                      </Link>
+                    ))}
+                  </span>
+                )}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {state.completed ? (
         <Card className="mt-6" data-testid="simulation-complete">

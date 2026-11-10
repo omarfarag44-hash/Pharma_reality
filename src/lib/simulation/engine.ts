@@ -20,11 +20,27 @@ import { addDaysIso } from "./calendar";
 import { SCENARIOS, SCENARIO_BY_CODE } from "./scenarios";
 import type { Progress } from "./progress";
 import {
+  baselineCommitment,
+  buildCharacters,
+  developmentLevel,
+  fitFactor,
+  react,
+  reactionLine,
+  styleGap,
+  taskCommitment,
+  taskCompetence,
+  type CharacterModel,
+  type ReactionTone,
+} from "./characters";
+import {
   COACHING_FOCUS,
   DNA_DIMENSIONS,
   METRIC_FIELDS,
   type CoachingFocus,
+  type DevelopmentLevel,
   type DnaDimension,
+  type LeadershipStyle,
+  type TaskCode,
   type Effect,
   type MemoryType,
   type MetricDelta,
@@ -55,6 +71,10 @@ export interface World {
   people: Partial<Record<RoleRef, string>>;
   /** Opening trust between each person and the player (-100..100). */
   baseTrust: Map<string, number>;
+  /** Character Engine inputs for every non-player employee. */
+  characters: Map<string, CharacterModel>;
+  /** Opening trust between two non-player characters, keyed by `pairKey` (mean of both directions). */
+  baseRelations: Map<string, number>;
 }
 
 const DEPT_ROLES = ["SCM", "PUR", "MKT", "QAC", "HR"] as const;
@@ -100,7 +120,15 @@ export function buildWorld(d: OrgDataset): World {
     if (r.targetId === player.id && !baseTrust.has(r.sourceId)) baseTrust.set(r.sourceId, r.trust);
   }
 
-  return { playerId: player.id, startDate: d.simulation.startDate, lengthDays: d.simulation.lengthDays, branches, people, baseTrust };
+  const pairs = new Map<string, number[]>();
+  for (const r of d.relationships) {
+    if (r.sourceId === player.id || r.targetId === player.id) continue;
+    const k = pairKey(r.sourceId, r.targetId);
+    pairs.set(k, [...(pairs.get(k) ?? []), r.trust]);
+  }
+  const baseRelations = new Map([...pairs].map(([k, v]) => [k, Math.round(v.reduce((a, b) => a + b, 0) / v.length)]));
+
+  return { playerId: player.id, startDate: d.simulation.startDate, lengthDays: d.simulation.lengthDays, branches, people, baseTrust, characters: buildCharacters(d), baseRelations };
 }
 
 // ----------------------------------------------------------------------------- state
@@ -115,15 +143,36 @@ export interface ScenarioInstance {
 }
 
 export interface AppliedEffect {
-  kind: "metric" | "trust";
-  /** Branch id (metric) or employee id (trust). */
+  kind: "metric" | "trust" | "commitment" | "relation";
+  /** Branch id (metric), employee id (trust, commitment) or "idA|idB" (relation). */
   target: string;
-  field: MetricField | "trust";
+  field: MetricField | "trust" | "commitment" | "relation";
   before: number;
   after: number;
 }
 
+/** Situational Leadership evidence for one decision (hidden from the player until the day closes). */
+export interface LeadershipRecord {
+  subjectId: string;
+  task: TaskCode;
+  competence: number;
+  commitment: number;
+  level: DevelopmentLevel;
+  /** null when the chosen option is not a leadership style (or the situation was ignored). */
+  style: LeadershipStyle | null;
+  gap: number | null;
+}
+
+export interface ReactionRecord {
+  subjectId: string;
+  tone: ReactionTone;
+  line: LocalizedText;
+  reasons: string[];
+}
+
 export interface DecisionRecord {
+  leadership?: LeadershipRecord;
+  reaction?: ReactionRecord;
   instance: ScenarioInstance;
   /** Index into the template's options, or null when the scenario was ignored. */
   option: number | null;
@@ -156,6 +205,10 @@ export interface SimState {
   completed: boolean;
   deltas: Map<string, MetricDelta>;
   trust: Map<string, number>;
+  /** Commitment shift per person (added to their task commitment). */
+  commitment: Map<string, number>;
+  /** Relationship trust shift between two non-player characters, keyed "idA|idB" (sorted). */
+  relations: Map<string, number>;
   flags: Map<string, number>;
   dna: Record<DnaDimension, number>;
   decisions: DecisionRecord[];
@@ -188,6 +241,8 @@ function initialState(): SimState {
     completed: false,
     deltas: new Map(),
     trust: new Map(),
+    commitment: new Map(),
+    relations: new Map(),
     flags: new Map(),
     dna: Object.fromEntries(DNA_DIMENSIONS.map((d) => [d, 0])) as Record<DnaDimension, number>,
     decisions: [],
@@ -241,6 +296,32 @@ export function currentMetrics(world: World, state: SimState, branchId: string):
 
 export function trustOf(world: World, state: SimState, employeeId: string): number {
   return clamp((world.baseTrust.get(employeeId) ?? 50) + (state.trust.get(employeeId) ?? 0), -100, 100);
+}
+
+export function pairKey(a: string, b: string) {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+/** Overall commitment (motivation + confidence) of a person, 0..100, independent of task. */
+export function commitmentOf(world: World, state: SimState, employeeId: string): number {
+  const c = world.characters.get(employeeId);
+  const base = c ? baselineCommitment(c) : 60;
+  return Math.round(clamp(base + (state.commitment.get(employeeId) ?? 0), 0, 100));
+}
+
+/** Trust between two non-player characters (-100..100). Pairs with no recorded relationship start at 30. */
+export function relationOf(world: World, state: SimState, a: string, b: string): number {
+  const k = pairKey(a, b);
+  return clamp((world.baseRelations.get(k) ?? 30) + (state.relations.get(k) ?? 0), -100, 100);
+}
+
+/** Development level of one person for one task, from the current state. */
+export function diagnose(world: World, state: SimState, employeeId: string, task: TaskCode) {
+  const c = world.characters.get(employeeId);
+  if (!c) return null;
+  const competence = taskCompetence(c, task);
+  const commitment = taskCommitment(c, task, trustOf(world, state, employeeId), state.commitment.get(employeeId) ?? 0);
+  return { competence, commitment, level: developmentLevel(competence, commitment) };
 }
 
 // ----------------------------------------------------------------------------- scenario generation
@@ -302,7 +383,13 @@ function instantiate(world: World, state: SimState, t: ScenarioTemplate, day: nu
   if (branchId) {
     const b = world.branches.find((x) => x.id === branchId)!;
     people.leader = b.leaderId;
-    if (t.staff && b.staffIds.length) people.staff = t.staff === "top" ? b.staffIds[0] : rng.pick(b.staffIds);
+    if (t.staff && b.staffIds.length) {
+      const years = (id: string) => world.characters.get(id)?.yearsOfExperience ?? 0;
+      people.staff =
+        t.staff === "top" ? b.staffIds[0] : t.staff === "junior" ? [...b.staffIds].sort((x, y) => years(x) - years(y) || x.localeCompare(y))[0] : rng.pick(b.staffIds);
+      const others = b.staffIds.filter((id) => id !== people.staff);
+      if (others.length) people.colleague = rng.pick(others);
+    }
     taken.add(branchId);
   }
   return { id: `d${day}-${t.code}`, code: t.code, day, branchId, people };
@@ -314,7 +401,7 @@ export function generateDay(world: World, state: SimState, day: number): Scenari
   const rng = createRng(`simulation:day:${day}`);
   const weekday = weekdayOf(world, day);
   const fixed = SCENARIOS.filter((t) => t.fixedDay === day || (t.fixedWeekday === weekday && t.fixedDay === undefined));
-  const pool = SCENARIOS.filter((t) => eligible(t, state, day));
+  const pool = SCENARIOS.filter((t) => !t.stream && eligible(t, state, day));
   // Flag-triggered follow-ups take priority so that earlier choices visibly come back.
   const followUps = pool.filter((t) => t.requires);
   const regular = pool.filter((t) => !t.requires);
@@ -325,8 +412,19 @@ export function generateDay(world: World, state: SimState, day: number): Scenari
     picked.push(...rng.weightedSample(regular, regular.map((t) => t.weight), Math.min(remaining, regular.length)));
   }
   const taken = new Set<string>();
-  return picked.map((t) => instantiate(world, state, t, day, rng, taken)).filter((x): x is ScenarioInstance => x !== null);
+  const core = picked.map((t) => instantiate(world, state, t, day, rng, taken)).filter((x): x is ScenarioInstance => x !== null);
+
+  // Leadership stream (Sprint 3): at most one situation a day, from its own seed.
+  const lrng = createRng(`simulation:leadership:${day}`);
+  const lpool = SCENARIOS.filter((t) => t.stream === "leadership" && eligible(t, state, day));
+  if (!lpool.length || !lrng.chance(LEADERSHIP_DAILY_CHANCE)) return core;
+  const [lt] = lrng.weightedSample(lpool, lpool.map((t) => t.weight), 1);
+  const inst = lt ? instantiate(world, state, lt, day, lrng, taken) : null;
+  return inst ? [...core, inst] : core;
 }
+
+/** Chance that a working day also brings one leadership situation. */
+export const LEADERSHIP_DAILY_CHANCE = 0.7;
 
 // ----------------------------------------------------------------------------- applying effects
 
@@ -365,6 +463,20 @@ function applyEffects(
       const before = trustOf(world, state, id);
       state.trust.set(id, (state.trust.get(id) ?? 0) + e.delta);
       applied.push({ kind: "trust", target: id, field: "trust", before, after: trustOf(world, state, id) });
+    } else if (e.kind === "commitment") {
+      const id = inst?.people[e.who];
+      if (!id) continue;
+      const before = commitmentOf(world, state, id);
+      state.commitment.set(id, (state.commitment.get(id) ?? 0) + e.delta);
+      applied.push({ kind: "commitment", target: id, field: "commitment", before, after: commitmentOf(world, state, id) });
+    } else if (e.kind === "relation") {
+      const a = inst?.people[e.a];
+      const b = inst?.people[e.b];
+      if (!a || !b || a === b) continue;
+      const key = pairKey(a, b);
+      const before = relationOf(world, state, a, b);
+      state.relations.set(key, (state.relations.get(key) ?? 0) + e.delta);
+      applied.push({ kind: "relation", target: key, field: "relation", before, after: relationOf(world, state, a, b) });
     } else if (e.kind === "memory") {
       const id = inst?.people[e.who];
       if (id) state.memories.push({ employeeId: id, day, type: e.type, text: e.text, salience: e.salience, instance: inst });
@@ -384,10 +496,61 @@ export function resolveScenario(world: World, state: SimState, inst: ScenarioIns
   const chosen: ScenarioOption | null = option === null ? null : t.options[option]!;
   const effects = chosen ? chosen.effects : t.ignored.effects;
   const dna = (chosen ? chosen.dna : t.ignored.dna) ?? {};
-  const factor = chosen?.trustScaled ? trustFactor(world, state, inst.people[chosen.trustScaled]) : 1;
+  let factor = chosen?.trustScaled ? trustFactor(world, state, inst.people[chosen.trustScaled]) : 1;
+
+  // Situational Leadership: diagnose the subject for this task BEFORE anything changes.
+  const subjectId = t.subject ? inst.people[t.subject] : undefined;
+  const diag = subjectId && t.task ? diagnose(world, state, subjectId, t.task) : null;
+  let leadership: LeadershipRecord | undefined;
+  if (diag && subjectId && t.task) {
+    const style = chosen?.style ?? null;
+    const gap = style ? styleGap(style, diag.level) : null;
+    leadership = { subjectId, task: t.task, competence: diag.competence, commitment: diag.commitment, level: diag.level, style, gap };
+    if (gap !== null) factor *= fitFactor(gap);
+  }
+
+  // Character Engine: how the subject experiences the action (only when an action was taken).
+  let reaction: ReactionRecord | undefined;
+  const character = subjectId ? world.characters.get(subjectId) : undefined;
+  if (chosen && subjectId && character && (chosen.tags?.length || leadership?.style)) {
+    const mems = state.memories.filter((m) => m.employeeId === subjectId);
+    const r = react({
+      character,
+      trust: trustOf(world, state, subjectId),
+      grievances: mems.filter((m) => m.type === "grievance").length,
+      recognitions: mems.filter((m) => m.type === "recognition").length,
+      tags: chosen.tags ?? [],
+      gap: leadership?.gap ?? null,
+      competence: diag?.competence ?? 3,
+    });
+    reaction = { subjectId, tone: r.tone, line: reactionLine(character, r.tone), reasons: r.reasons };
+  }
+
   const applied = applyEffects(world, state, inst, effects, inst.day, factor);
+  if (reaction && subjectId) {
+    const r = { appreciative: [4, 8], accepting: [2, 4], guarded: [0, 0], resistant: [-3, -5], hurt: [-6, -10] }[reaction.tone];
+    const tb = trustOf(world, state, subjectId);
+    state.trust.set(subjectId, (state.trust.get(subjectId) ?? 0) + r[0]!);
+    if (r[0]) applied.push({ kind: "trust", target: subjectId, field: "trust", before: tb, after: trustOf(world, state, subjectId) });
+    const cb = commitmentOf(world, state, subjectId);
+    state.commitment.set(subjectId, (state.commitment.get(subjectId) ?? 0) + r[1]!);
+    if (r[1]) applied.push({ kind: "commitment", target: subjectId, field: "commitment", before: cb, after: commitmentOf(world, state, subjectId) });
+    if (reaction.tone === "appreciative" || reaction.tone === "hurt") {
+      state.memories.push({
+        employeeId: subjectId,
+        day: inst.day,
+        type: reaction.tone === "hurt" ? "grievance" : "recognition",
+        text:
+          reaction.tone === "hurt"
+            ? { en: `Felt let down by how the supervisor handled "${t.title.en}".`, ar: `شعر بخيبة أمل من طريقة تعامل المشرف مع «${t.title.ar}».` }
+            : { en: `Appreciated how the supervisor handled "${t.title.en}".`, ar: `قدّر طريقة تعامل المشرف مع «${t.title.ar}».` },
+        salience: reaction.tone === "hurt" ? 80 : 65,
+        instance: inst,
+      });
+    }
+  }
   addDna(state, dna);
-  const record: DecisionRecord = { instance: inst, option, day: inst.day, dna, effects: applied };
+  const record: DecisionRecord = { instance: inst, option, day: inst.day, dna, effects: applied, leadership, reaction };
   state.decisions.push(record);
   state.lastFired.set(inst.code, inst.day);
   return record;

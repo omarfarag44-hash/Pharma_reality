@@ -33,7 +33,7 @@ export function EffectList({ effects, dict }: { effects: EffectView[]; dict: Dic
             {e.targetHref ? (
               <Link href={e.targetHref} className={cn("hover:underline", e.kind === "metric" && "ltr-nums")}>{e.target}</Link>
             ) : (
-              <span>{dict.sim.areaWide}</span>
+              <span>{e.target === "area" ? dict.sim.areaWide : e.target}</span>
             )}
             <span className="ms-auto tabular-nums" dir="ltr">
               {e.change ?? (
@@ -121,6 +121,11 @@ export function ScenarioCard({ view, dict, locale, interactive }: { view: Scenar
               <strong>{decided.label ?? t.ignoredLabel}</strong>
             </div>
             <p className="leading-relaxed">{decided.outcome}</p>
+            {decided.reaction && (
+              <blockquote className="border-primary/40 border-s-2 ps-3 text-sm italic" data-testid="reaction" data-tone={decided.reaction.tone}>
+                <span className="font-medium not-italic">{decided.reaction.name}:</span> «{decided.reaction.line}»
+              </blockquote>
+            )}
             <EffectList effects={decided.effects} dict={dict} />
           </div>
         )}

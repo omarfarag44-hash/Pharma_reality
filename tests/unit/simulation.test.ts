@@ -38,11 +38,12 @@ describe("scenario catalogue", () => {
   });
 
   it("only uses placeholders the engine can resolve", () => {
-    const allowed = new Set(["branch", "leader", "staff", "khalid", "noura", "faisal", "ops", "ceo", "SCM", "PUR", "MKT", "QAC", "HR"]);
+    const allowed = new Set(["branch", "leader", "staff", "colleague", "khalid", "noura", "faisal", "ops", "ceo", "SCM", "PUR", "MKT", "QAC", "HR"]);
     for (const s of SCENARIOS) {
       const texts = [s.title, s.narrative, s.ignored.outcome, ...s.options.flatMap((o) => [o.label, o.outcome])].flatMap((t) => [t.en, t.ar]);
       for (const t of texts) for (const m of t.matchAll(/\{(\w+)\}/g)) expect(allowed.has(m[1]!), `${s.key}: {${m[1]}}`).toBe(true);
-      if (s.branch === "none") expect(texts.some((t) => /\{(branch|leader|staff)\}/.test(t)), s.key).toBe(false);
+      if (s.branch === "none") expect(texts.some((t) => /\{(branch|leader|staff|colleague)\}/.test(t)), s.key).toBe(false);
+      if (texts.some((t) => /\{(staff|colleague)\}/.test(t))) expect(s.staff, `${s.key} needs a staff selector`).toBeDefined();
     }
   });
 });
