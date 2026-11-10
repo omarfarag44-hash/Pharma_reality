@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, CalendarDays, Flag, GraduationCap, LayoutDashboard, Network, Sparkles, Users, UsersRound, Landmark } from "lucide-react";
+import { BookOpen, Building2, CalendarDays, Flag, GraduationCap, LayoutDashboard, Network, Sparkles, Users, UsersRound, Landmark } from "lucide-react";
 import type { Locale } from "@/domain/common";
 import type { Dictionary } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ const ICONS = {
   departments: Landmark,
   peers: UsersRound,
   calendar: CalendarDays,
+  knowledge: BookOpen,
 } as const;
 
 export function SidebarNav({ locale, nav, onNavigate }: { locale: Locale; nav: Dictionary["nav"]; onNavigate?: () => void }) {

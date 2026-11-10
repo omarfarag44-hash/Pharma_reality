@@ -6,6 +6,8 @@ import { pageContext } from "@/lib/page";
 import { DNA_MIN_DECISIONS, leadershipDna } from "@/lib/simulation/leadership";
 import { DNA_DIMENSIONS } from "@/lib/simulation/types";
 import { decisionLog, getSimIndex } from "@/services/simulation-service";
+import { leadershipMoments, slSummary, SL_MIN_MOMENTS } from "@/services/report-service";
+import { LeadershipMomentItem } from "@/components/simulation/leadership-moment";
 import { EffectList } from "@/components/simulation/scenario-card";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatTile } from "@/components/shared/stat-tile";
@@ -21,6 +23,9 @@ export default async function LeadershipPage({ params }: { params: Promise<{ loc
   const dna = leadershipDna(run.state);
   const log = decisionLog(run, idx, locale);
   const styleKey = dna.style as keyof typeof t.styles | null;
+  const sl = dict.sl;
+  const summary = slSummary(run);
+  const moments = leadershipMoments(run, idx, locale, dict).filter((m) => m.style !== null).slice(0, 8);
 
   return (
     <>
@@ -93,6 +98,58 @@ export default async function LeadershipPage({ params }: { params: Promise<{ loc
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-6" data-testid="sl-summary">
+        <CardHeader>
+          <CardTitle>{sl.slTitle}</CardTitle>
+          <CardDescription>{sl.slSubtitle}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5 text-sm">
+          {summary.moments === 0 ? (
+            <p className="text-muted-foreground" data-testid="sl-empty">{sl.slEmpty}</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatTile testId="sl-moments" label={sl.moments} value={summary.moments} />
+                <StatTile testId="sl-match" label={sl.matchRate} value={`${summary.matchRate}%`} />
+                <StatTile label={sl.overDirecting} value={summary.overDirecting} />
+                <StatTile label={sl.underSupporting} value={summary.underSupporting} />
+              </div>
+              <p className="bg-muted/50 rounded-lg p-3" data-testid="sl-pattern" data-pattern={summary.pattern}>
+                {summary.pattern === "forming" ? fmt(sl.pattern.forming, { n: SL_MIN_MOMENTS }) : sl.pattern[summary.pattern]}
+              </p>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <h3 className="text-muted-foreground mb-2 text-xs font-medium">{sl.byWeek}</h3>
+                  <ul className="flex flex-col gap-2">
+                    {summary.byWeek.map((w) => (
+                      <li key={w.week} className="grid grid-cols-[5rem_1fr_3rem] items-center gap-2 text-xs">
+                        <span>{fmt(sl.week, { n: w.week })}</span>
+                        <Progress value={Math.max(w.matchRate, 1)} indicatorClassName={w.matchRate >= 60 ? "bg-good" : w.matchRate < 35 ? "bg-critical" : "bg-primary"} />
+                        <span className="text-end tabular-nums" dir="ltr">{w.matchRate}%</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="text-muted-foreground mb-2 text-xs font-medium">{sl.byLevel}</h3>
+                  <ul className="flex flex-col gap-1.5 text-xs">
+                    {summary.byLevel.filter((l) => l.moments > 0).map((l) => (
+                      <li key={l.level} className="flex items-center justify-between gap-2">
+                        <span>{sl.levelName[l.level]}</span>
+                        <span className="tabular-nums" dir="ltr">{l.matched}/{l.moments}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <ul className="flex flex-col gap-3" data-testid="sl-moments-list">
+                {moments.map((m, i) => <LeadershipMomentItem key={i} m={m} dict={dict} locale={locale} showDay />)}
+              </ul>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 }

@@ -17,10 +17,10 @@ export type MetricDelta = Record<MetricField, number>;
 
 /**
  * People a scenario can involve.
- * - `leader` / `staff` are resolved inside the scenario's branch.
+ * - `leader` / `staff` / `colleague` are resolved inside the scenario's branch (`colleague` ≠ `staff`).
  * - The rest are resolved once from the organisation (peers, executives, department heads).
  */
-export const ROLE_REFS = ["leader", "staff", "khalid", "noura", "faisal", "ops", "ceo", "SCM", "PUR", "MKT", "QAC", "HR"] as const;
+export const ROLE_REFS = ["leader", "staff", "colleague", "khalid", "noura", "faisal", "ops", "ceo", "SCM", "PUR", "MKT", "QAC", "HR"] as const;
 export type RoleRef = (typeof ROLE_REFS)[number];
 
 export const DNA_DIMENSIONS = ["results", "people", "integrity", "customer", "collaboration", "decisiveness"] as const;
@@ -31,9 +31,44 @@ export type MemoryType = (typeof MEMORY_TYPES)[number];
 
 export type ScenarioCategory = "operations" | "inventory" | "people" | "customer" | "compliance" | "stakeholder";
 
+/**
+ * Work a person is asked to do in a scenario. Situational Leadership diagnoses a
+ * development level per TASK, so the same pharmacist can be D4 on inventory and D2 on complaints.
+ */
+export const TASKS = ["sales", "clinical", "digital", "inventory", "conflict", "leadership", "customer", "compliance", "planning"] as const;
+export type TaskCode = (typeof TASKS)[number];
+
+/** Situational Leadership styles: S1 Directing, S2 Coaching, S3 Supporting, S4 Delegating. */
+export const LEADERSHIP_STYLES = ["S1", "S2", "S3", "S4"] as const;
+export type LeadershipStyle = (typeof LEADERSHIP_STYLES)[number];
+export const DEVELOPMENT_LEVELS = ["D1", "D2", "D3", "D4"] as const;
+export type DevelopmentLevel = (typeof DEVELOPMENT_LEVELS)[number];
+
+/**
+ * What the supervisor's action looks like to the person receiving it.
+ * The Character Engine reads these against each person's motivators, stress triggers and personality.
+ */
+export const ACTION_TAGS = [
+  "close_supervision",
+  "public",
+  "formal",
+  "recognition",
+  "listening",
+  "development",
+  "autonomy",
+  "pressure",
+  "support",
+  "fairness",
+] as const;
+export type ActionTag = (typeof ACTION_TAGS)[number];
+
 export type Effect =
   | { kind: "metric"; scope: "branch" | "area"; field: MetricField; delta: number }
   | { kind: "trust"; who: RoleRef; delta: number }
+  /** Commitment (motivation + confidence) towards work, -100..100 shift from the person's baseline. */
+  | { kind: "commitment"; who: RoleRef; delta: number }
+  /** Relationship between two characters (neither is the player). */
+  | { kind: "relation"; a: RoleRef; b: RoleRef; delta: number }
   | { kind: "memory"; who: RoleRef; type: MemoryType; text: LocalizedText; salience: number }
   | { kind: "flag"; flag: string };
 
@@ -45,6 +80,10 @@ export interface ScenarioOption {
   effects: Effect[];
   /** Metric effects are scaled by how much this person trusts the player (people-led options). */
   trustScaled?: RoleRef;
+  /** The Situational Leadership style this option expresses (hidden from the player). */
+  style?: LeadershipStyle;
+  /** How the action is experienced by the scenario's subject (Character Engine input). */
+  tags?: ActionTag[];
 }
 
 export type BranchSelector = "lowestStock" | "highestExpiry" | "lowestCsat" | "lowestCompliance" | "lowestAchievement" | "topAchievement" | "random" | "none";
@@ -56,13 +95,23 @@ export interface ScenarioTemplate {
   category: ScenarioCategory;
   severity: ScenarioSeverity;
   title: LocalizedText;
-  /** Supports {branch}, {leader}, {staff}, {khalid}, {noura}, {faisal}, {ops}, {ceo}, {SCM}, {PUR}, {MKT}, {QAC}, {HR}. */
+  /** Supports {branch}, {leader}, {staff}, {colleague}, {khalid}, {noura}, {faisal}, {ops}, {ceo}, {SCM}, {PUR}, {MKT}, {QAC}, {HR}. */
   narrative: LocalizedText;
   branch: BranchSelector;
-  staff?: "top" | "random";
+  /** How the scenario's `staff` member is picked. `junior` = least experienced. */
+  staff?: "top" | "random" | "junior";
   /** Who appears on the scenario card (their trust and memories are shown). */
   people: RoleRef[];
+  /** The person whose development level and reaction matter (Situational Leadership + Character Engine). */
+  subject?: RoleRef;
+  /** The task the subject is being led on (development level is diagnosed for this task). */
+  task?: TaskCode;
   weight: number;
+  /**
+   * `leadership` = Sprint 3 situations, drawn from their own daily stream (at most one a day,
+   * separate seed) so the core schedule of situations is unchanged.
+   */
+  stream?: "leadership";
   minDay?: number;
   /** Always happens on this day. */
   fixedDay?: number;

@@ -14,10 +14,11 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
 function DayCell({ day, locale, weekendLabel, decisions }: { day: CalendarDay; locale: "ar" | "en"; weekendLabel: string; decisions: number }) {
-  const Comp = day.status === "current" ? Link : "div";
+  const past = day.status === "past" && !day.isWeekend;
+  const Comp = day.status === "current" || past ? Link : "div";
   return (
     <Comp
-      href={`/${locale}/today`}
+      href={past ? `/${locale}/report/${day.dayNumber}` : `/${locale}/today`}
       data-testid="calendar-day"
       data-decisions={decisions}
       data-day={day.dayNumber}
@@ -27,6 +28,7 @@ function DayCell({ day, locale, weekendLabel, decisions }: { day: CalendarDay; l
       className={cn(
         "flex min-h-14 flex-col justify-between rounded-md border p-1.5 text-[11px]",
         day.isWeekend && "bg-muted/60",
+        past && "hover:border-primary/60",
         day.status === "current" && "border-primary bg-primary text-primary-foreground ring-primary/20 ring-2",
       )}
     >

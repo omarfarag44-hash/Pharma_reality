@@ -9,7 +9,7 @@ import type { OrgRepository } from "@/data/repository/types";
 import { formatNumber } from "@/lib/i18n/format";
 import { trustOf, type AppliedEffect, type DecisionRecord, type Memory, type ScenarioInstance, type SimulationRun } from "@/lib/simulation/engine";
 import { SCENARIO_BY_CODE } from "@/lib/simulation/scenarios";
-import type { MetricField, RoleRef, ScenarioTemplate } from "@/lib/simulation/types";
+import type { RoleRef, ScenarioTemplate } from "@/lib/simulation/types";
 
 export interface SimIndex {
   employees: Map<string, Employee>;
@@ -35,8 +35,8 @@ export function renderText(text: LocalizedText, inst: ScenarioInstance | null, i
 }
 
 export interface EffectView {
-  kind: "metric" | "trust";
-  field: MetricField | "trust";
+  kind: AppliedEffect["kind"];
+  field: AppliedEffect["field"];
   /** Branch code, person name or "area". */
   target: string;
   targetHref: string | null;
@@ -49,8 +49,8 @@ export interface EffectView {
   positive: boolean;
 }
 
-const DIGITS: Record<MetricField | "trust", number> = { sales: 1, stock: 1, compliance: 1, csat: 1, expiry: 2, slow: 2, trust: 0 };
-const UNIT: Record<MetricField | "trust", string> = { sales: "%", stock: "%", compliance: "", csat: "", expiry: "%", slow: "%", trust: "" };
+const DIGITS: Record<AppliedEffect["field"], number> = { sales: 1, stock: 1, compliance: 1, csat: 1, expiry: 2, slow: 2, trust: 0, commitment: 0, relation: 0 };
+const UNIT: Record<AppliedEffect["field"], string> = { sales: "%", stock: "%", compliance: "", csat: "", expiry: "%", slow: "%", trust: "", commitment: "", relation: "" };
 
 export function effectView(e: AppliedEffect, idx: SimIndex, locale: Locale): EffectView {
   const lowerIsBetter = e.field === "expiry" || e.field === "slow";
@@ -72,11 +72,18 @@ export function effectView(e: AppliedEffect, idx: SimIndex, locale: Locale): Eff
     };
   }
   const branch = e.kind === "metric" ? idx.branches.get(e.target) : undefined;
-  const person = e.kind === "trust" ? idx.employees.get(e.target) : undefined;
+  const person = e.kind === "trust" || e.kind === "commitment" ? idx.employees.get(e.target) : undefined;
+  const pair =
+    e.kind === "relation"
+      ? e.target
+          .split("|")
+          .map((id) => idx.employees.get(id)?.fullName[locale] ?? id)
+          .join(" ↔ ")
+      : null;
   return {
     kind: e.kind,
     field: e.field,
-    target: branch ? branch.code : person ? person.fullName[locale] : e.target,
+    target: branch ? branch.code : person ? person.fullName[locale] : (pair ?? e.target),
     targetHref: branch ? `/${locale}/branches/${branch.code}` : person ? `/${locale}/people/${person.id}` : null,
     before: f(e.before),
     after: f(e.after),
@@ -101,7 +108,14 @@ export interface ScenarioView {
   branch: Branch | null;
   people: PersonInScenario[];
   options: Array<{ index: number; label: string }>;
-  decision: { option: number | null; label: string | null; outcome: string; effects: EffectView[] } | null;
+  decision: {
+    option: number | null;
+    label: string | null;
+    outcome: string;
+    effects: EffectView[];
+    /** What the person said back (Character Engine). The leadership evaluation itself waits for the end-of-day report. */
+    reaction: { name: string; line: string; tone: string } | null;
+  } | null;
 }
 
 export function memoriesOf(run: SimulationRun, employeeId: string, idx: SimIndex, locale: Locale, exceptInstance?: string) {
@@ -119,6 +133,9 @@ export function decisionView(d: DecisionRecord, idx: SimIndex, locale: Locale): 
     label: chosen ? renderText(chosen.label, d.instance, idx, locale) : null,
     outcome: renderText(chosen ? chosen.outcome : t.ignored.outcome, d.instance, idx, locale),
     effects: d.effects.filter((e) => Math.abs(e.after - e.before) > 1e-9 || e.target === "area").map((e) => effectView(e, idx, locale)),
+    reaction: d.reaction
+      ? { name: idx.employees.get(d.reaction.subjectId)?.fullName[locale] ?? "", line: d.reaction.line[locale], tone: d.reaction.tone }
+      : null,
   };
 }
 

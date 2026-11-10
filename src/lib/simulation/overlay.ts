@@ -7,11 +7,12 @@
  *   record replaced by one tagged `scenario_generated`. Untouched branches keep
  *   their `simulated_current` record. History is never changed.
  * - Trust between the player and a character is moved by the engine's deltas.
+ * - Trust between two non-player characters is moved by relation effects (both directions).
  * - The session's current day and status follow the progress.
  */
 import type { OrgDataset } from "@/domain/dataset";
 import { METRIC_FIELDS } from "./types";
-import { adjustMetrics, trustOf, type SimulationRun } from "./engine";
+import { adjustMetrics, pairKey, trustOf, type SimulationRun } from "./engine";
 
 export function applySimulation(d: OrgDataset, run: SimulationRun): OrgDataset {
   const { world, state } = run;
@@ -26,14 +27,20 @@ export function applySimulation(d: OrgDataset, run: SimulationRun): OrgDataset {
     return { ...m, ...adjustMetrics(m, state.deltas.get(m.branchId)), id: m.id, branchId: m.branchId, provenance: "scenario_generated" as const };
   });
 
-  const relationships = state.trust.size
-    ? d.relationships.map((r) => {
-        const other = r.sourceId === world.playerId ? r.targetId : r.targetId === world.playerId ? r.sourceId : null;
-        if (!other || !state.trust.has(other)) return r;
-        const shift = trustOf(world, state, other) - (world.baseTrust.get(other) ?? 50);
-        return { ...r, trust: Math.max(-100, Math.min(100, Math.round(r.trust + shift))) };
-      })
-    : d.relationships;
+  const bound = (v: number) => Math.max(-100, Math.min(100, Math.round(v)));
+  const relationships =
+    state.trust.size || state.relations.size
+      ? d.relationships.map((r) => {
+          const other = r.sourceId === world.playerId ? r.targetId : r.targetId === world.playerId ? r.sourceId : null;
+          if (!other) {
+            const shift = state.relations.get(pairKey(r.sourceId, r.targetId));
+            return shift ? { ...r, trust: bound(r.trust + shift) } : r;
+          }
+          if (!state.trust.has(other)) return r;
+          const shift = trustOf(world, state, other) - (world.baseTrust.get(other) ?? 50);
+          return { ...r, trust: bound(r.trust + shift) };
+        })
+      : d.relationships;
 
   return {
     ...d,

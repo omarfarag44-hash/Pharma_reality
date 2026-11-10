@@ -10,8 +10,9 @@
  * a template or reorder its options; add new ones at the end.
  */
 import type { ScenarioTemplate } from "./types";
+import { LEADERSHIP_SCENARIOS } from "./scenarios-leadership";
 
-export const SCENARIOS: ScenarioTemplate[] = [
+const CORE_SCENARIOS: ScenarioTemplate[] = [
   {
     code: 1,
     key: "first_priorities",
@@ -865,5 +866,7 @@ export const SCENARIOS: ScenarioTemplate[] = [
     },
   },
 ];
+
+export const SCENARIOS: ScenarioTemplate[] = [...CORE_SCENARIOS, ...LEADERSHIP_SCENARIOS];
 
 export const SCENARIO_BY_CODE = new Map(SCENARIOS.map((s) => [s.code, s]));

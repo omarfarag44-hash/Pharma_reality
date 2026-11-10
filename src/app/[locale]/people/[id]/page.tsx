@@ -19,9 +19,9 @@ import { formatDate, formatNumber, formatPercent } from "@/lib/i18n/format";
 import { pageContext } from "@/lib/page";
 import { getPersonDetail } from "@/services/people-service";
 import { getSimulation } from "@/data/repository";
-import { trustOf } from "@/lib/simulation/engine";
+import { commitmentOf, diagnose, trustOf } from "@/lib/simulation/engine";
 import { leadershipDna } from "@/lib/simulation/leadership";
-import { DNA_DIMENSIONS } from "@/lib/simulation/types";
+import { DNA_DIMENSIONS, TASKS } from "@/lib/simulation/types";
 import { getSimIndex, memoriesOf } from "@/services/simulation-service";
 import { TrustValue } from "@/components/simulation/scenario-card";
 import { SingleLineChart } from "@/components/charts/charts";
@@ -52,6 +52,8 @@ export default async function PersonPage({ params }: { params: Promise<{ locale:
   const t = dict.profile;
   const L = (cat: Parameters<typeof catalogLabel>[0], code: string) => catalogLabel(cat, code)[locale];
   const band = p ? performanceBand(p.performanceScore) : null;
+  const sl = dict.sl;
+  const devLevels = e.isPlayer ? [] : TASKS.map((task) => ({ task, d: diagnose(run.world, run.state, id, task) })).filter((x) => x.d !== null);
 
   return (
     <>
@@ -366,6 +368,41 @@ export default async function PersonPage({ params }: { params: Promise<{ locale:
                   ))}
                 </ul>
               )}
+            </CardContent>
+          </Card>
+        )}
+        {devLevels.length > 0 && (
+          <Card data-testid="dev-levels">
+            <CardHeader>
+              <CardTitle>{sl.devTitle}</CardTitle>
+              <CardDescription>{sl.devSubtitle}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 text-sm">
+              <div className="text-xs">
+                {sl.overallCommitment}: <span className="font-medium tabular-nums" dir="ltr" data-testid="overall-commitment">{commitmentOf(run.world, run.state, id)}</span>
+              </div>
+              <table className="w-full text-xs">
+                <thead className="text-muted-foreground">
+                  <tr className="border-b">
+                    <th className="py-1.5 text-start font-medium">{sl.task}</th>
+                    <th className="py-1.5 text-end font-medium">{sl.competence}</th>
+                    <th className="py-1.5 text-end font-medium">{sl.commitmentLabel}</th>
+                    <th className="py-1.5 text-end font-medium">{sl.level}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {devLevels.map(({ task, d }) => (
+                    <tr key={task} className="border-b last:border-0" data-testid="dev-level" data-task={task} data-level={d!.level}>
+                      <td className="py-1.5">{sl.taskLabel[task]}</td>
+                      <td className="py-1.5 text-end tabular-nums" dir="ltr">{d!.competence.toFixed(1)}</td>
+                      <td className="py-1.5 text-end tabular-nums" dir="ltr">{d!.commitment}</td>
+                      <td className="py-1.5 text-end">
+                        <Badge variant={d!.level === "D4" ? "good" : d!.level === "D3" ? "secondary" : d!.level === "D2" ? "watch" : "muted"} title={sl.levelHint[d!.level]}>{d!.level}</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </CardContent>
           </Card>
         )}

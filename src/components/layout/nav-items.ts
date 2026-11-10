@@ -11,4 +11,5 @@ export const NAV_ITEMS = [
   { href: "/departments", key: "departments", icon: "departments" },
   { href: "/peers", key: "peers", icon: "peers" },
   { href: "/calendar", key: "calendar", icon: "calendar" },
+  { href: "/knowledge", key: "knowledge", icon: "knowledge" },
 ] as const satisfies ReadonlyArray<{ href: string; key: keyof Dictionary["nav"]; icon: string }>;
